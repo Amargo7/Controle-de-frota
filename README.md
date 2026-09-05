@@ -1,6 +1,6 @@
 # Controle de Frota
 
-Sistema simples para controlar o vencimento de CRLV e IPVA da frota de veículos da empresa, com aviso antecipado (10-15 dias) antes do vencimento para evitar multa da PRF por documentação vencida.
+Sistema simples para controlar o vencimento de CRLV e IPVA da frota de veículos da empresa, com aviso antecipado (10-15 dias) antes do vencimento para evitar multa por documentação vencida.
 
 ## Como funciona
 
