@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Controle de Frota</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231C2733'/%3E%3Cpath d='M20 62 L27 42 Q30 36 38 36 L62 36 Q70 36 73 42 L80 62 L80 72 Q80 76 76 76 L70 76 Q66 76 66 72 L66 68 L34 68 L34 72 Q34 76 30 76 L24 76 Q20 76 20 72 Z' fill='%23C9812E'/%3E%3Ccircle cx='32' cy='68' r='6' fill='%231C2733'/%3E%3Ccircle cx='68' cy='68' r='6' fill='%231C2733'/%3E%3C/svg%3E" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --graphite: #1C2733;
+    --graphite-soft: #2A3644;
+    --amber: #C9812E;
+    --amber-bg: #FBF0DF;
+    --critico: #D6491F;
+    --critico-bg: #FBE3DA;
+    --green: #2F7D5C;
+    --green-bg: #E7F3ED;
+    --red: #B23A32;
+    --red-bg: #FBEAE8;
+    --grey: #6B7280;
+    --grey-bg: #EEF0F2;
+    --paper: #FAF9F7;
+    --card: #FFFFFF;
+    --line: #E4E1DA;
+    --text: #22262B;
+  }
+  :root[data-theme="dark"] {
+    --graphite: #E7EAEE;
+    --graphite-soft: #FFFFFF;
+    --amber-bg: #3A2C14;
+    --critico-bg: #3A2016;
+    --green-bg: #15302A;
+    --red-bg: #371C1A;
+    --grey: #9AA3AE;
+    --grey-bg: #263140;
+    --paper: #141A22;
+    --card: #1C2430;
+    --line: #2C3744;
+    --text: #E7EAEE;
+  }
+  * { box-sizing: border-box; }
+  body { transition: background 0.15s ease, color 0.15s ease; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    background: var(--paper);
+    min-height: 100vh;
+    margin: 0;
+    padding: 28px 20px 60px;
+  }
+
+  .fr-wrap { max-width: 1080px; margin: 0 auto; }
+
+  .fr-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    flex-wrap: wrap; gap: 14px; margin-bottom: 22px;
+  }
+  .fr-title { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--graphite); margin: 0; }
+  .fr-sub { font-size: 13.5px; color: var(--grey); margin: 4px 0 0; }
+  .fr-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  button { font-family: inherit; }
+  .fr-add-btn {
+    background: var(--graphite); color: #fff; border: none;
+    padding: 10px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s ease;
+  }
+  .fr-add-btn:hover { background: var(--graphite-soft); }
+  .fr-ghost-btn {
+    background: transparent; color: var(--graphite); border: 1px solid var(--line);
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .fr-ghost-btn:hover { border-color: var(--graphite); }
+
+  .fr-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+  .fr-stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .fr-stat .num { font-size: 22px; font-weight: 700; line-height: 1; color: var(--graphite); }
+  .fr-stat .lbl { font-size: 12px; color: var(--grey); margin-top: 6px; }
+  .fr-stat.vencido .num { color: var(--red); }
+  .fr-stat.critico .num { color: var(--critico); }
+  .fr-stat.atencao .num { color: var(--amber); }
+  .fr-stat.ok .num { color: var(--green); }
+
+  .fr-controls { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .fr-search, .fr-filter {
+    border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+    padding: 9px 12px; font-size: 13.5px; color: var(--text);
+  }
+  .fr-search { flex: 1; min-width: 220px; }
+  .fr-filter { min-width: 190px; }
+
+  .fr-table-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table.fr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.fr-table th {
+    text-align: left; font-size: 11.5px; color: var(--grey); font-weight: 600;
+    padding: 12px 14px; border-bottom: 1px solid var(--line); background: #FBFAF8;
+  }
+  table.fr-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  table.fr-table tr:last-child td { border-bottom: none; }
+  .fr-placa { font-weight: 700; color: var(--graphite); }
+  .fr-modelo { color: var(--grey); font-size: 12.5px; }
+  .fr-contrato { font-size: 12px; color: var(--grey); margin-top: 2px; }
+
+  .fr-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px;
+    border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .fr-badge.vencido { background: var(--red-bg); color: var(--red); }
+  .fr-badge.critico { background: var(--critico-bg); color: var(--critico); }
+  .fr-badge.atencao { background: var(--amber-bg); color: var(--amber); }
+  .fr-badge.ok { background: var(--green-bg); color: var(--green); }
+  .fr-badge.sem { background: var(--grey-bg); color: var(--grey); }
+  .fr-date { font-size: 12px; color: var(--grey); margin-top: 3px; }
+
+  .fr-actions { display: flex; gap: 6px; }
+  .fr-icon-btn {
+    background: transparent; border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; font-size: 12px; cursor: pointer; color: var(--grey);
+  }
+  .fr-icon-btn:hover { border-color: var(--graphite); color: var(--graphite); }
+  .fr-icon-btn.del:hover { border-color: var(--red); color: var(--red); }
+
+  .fr-empty { padding: 50px 20px; text-align: center; color: var(--grey); font-size: 13.5px; }
+  .fr-error { padding: 14px 16px; background: var(--red-bg); color: var(--red); border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+
+  .fr-overlay {
+    position: fixed; inset: 0; background: rgba(20,24,28,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 999; padding: 20px;
+  }
+  .fr-modal { background: var(--card); border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+  .fr-modal h3 { margin: 0 0 6px; font-size: 17px; color: var(--graphite); }
+  .fr-modal p.fr-modal-note { margin: 0 0 16px; font-size: 12.5px; color: var(--grey); }
+  .fr-field { margin-bottom: 12px; }
+  .fr-field label { display: block; font-size: 12px; color: var(--grey); margin-bottom: 5px; font-weight: 600; }
+  .fr-field input, .fr-field select {
+    width: 100%; border: 1px solid var(--line); border-radius: 7px;
+    padding: 9px 11px; font-size: 13.5px; background: var(--paper); font-family: inherit;
+  }
+  .fr-field input:focus, .fr-field select:focus { outline: 2px solid var(--graphite-soft); outline-offset: 1px; }
+  .fr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fr-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .fr-btn-secondary { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; color: var(--text); }
+  .fr-btn-primary { background: var(--graphite); border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; color: #fff; font-weight: 600; }
+
+  .fr-placa-link { cursor: pointer; }
+  .fr-placa-link:hover { text-decoration: underline; }
+  .fr-fieldset-title {
+    font-size: 12px; font-weight: 700; color: var(--grey); text-transform: uppercase;
+    letter-spacing: 0.03em; margin: 18px 0 10px; border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .fr-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+  .fr-detail-item .lbl { font-size: 11.5px; color: var(--grey); margin-bottom: 3px; }
+  .fr-detail-item .val { font-size: 13.5px; color: var(--text); font-weight: 600; }
+  .fr-detail-item .val.empty { color: var(--grey); font-weight: 400; font-style: italic; }
+  @media (max-width: 480px) { .fr-detail-grid { grid-template-columns: 1fr; } }
+
+  .fr-role-badge {
+    display: inline-flex; align-items: center; font-size: 11px; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px; background: var(--grey-bg); color: var(--grey);
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .fr-role-badge.admin { background: var(--green-bg); color: var(--green); }
+  .fr-user-bar { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--grey); }
+  .fr-link-btn { background: none; border: none; color: var(--grey); text-decoration: underline; cursor: pointer; font-size: 12.5px; padding: 0; }
+  .fr-crlv-box { border: 1px dashed var(--line); border-radius: 8px; padding: 12px; font-size: 12.5px; color: var(--grey); margin-top: 4px; }
+  .fr-crlv-box .fr-btn-secondary { margin-top: 8px; }
+
+  .fr-loading { padding: 60px; text-align: center; color: var(--grey); font-size: 13.5px; }
+
+  .fr-logo { display: flex; align-items: center; gap: 10px; }
+  .fr-logo svg { flex-shrink: 0; }
+  .fr-theme-btn {
+    background: transparent; border: 1px solid var(--line); border-radius: 8px;
+    width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--graphite);
+  }
+  .fr-theme-btn:hover { border-color: var(--graphite); }
+
+  .fr-stat { position: relative; display: flex; align-items: center; gap: 12px; }
+  .fr-stat .icon {
+    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; background: var(--grey-bg); color: var(--grey);
+  }
+  .fr-stat.vencido .icon { background: var(--red-bg); color: var(--red); }
+  .fr-stat.critico .icon { background: var(--critico-bg); color: var(--critico); }
+  .fr-stat.atencao .icon { background: var(--amber-bg); color: var(--amber); }
+  .fr-stat.ok .icon { background: var(--green-bg); color: var(--green); }
+
+  table.fr-table tr { border-left: 3px solid transparent; }
+  table.fr-table tr.status-vencido { border-left-color: var(--red); }
+  table.fr-table tr.status-critico { border-left-color: var(--critico); }
+  table.fr-table tr.status-atencao { border-left-color: var(--amber); }
+  table.fr-table tr.status-ok { border-left-color: var(--green); }
+
+  .fr-filters-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .fr-confirm-text { font-size: 13px; color: var(--text); margin: 0 0 10px; }
+  .fr-confirm-text b { color: var(--red); }
+
+  .fr-history-list { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow-y: auto; }
+  .fr-history-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .fr-history-item .meta { color: var(--grey); font-size: 11.5px; margin-bottom: 6px; }
+  .fr-history-item .change { margin: 2px 0; }
+  .fr-history-item .change b { color: var(--graphite); }
+  .fr-history-empty { color: var(--grey); font-size: 12.5px; text-align: center; padding: 20px 0; }
+
+  @media (max-width: 760px) {
+    .fr-stats { grid-template-columns: repeat(2, 1fr); }
+    .fr-row2 { grid-template-columns: 1fr; }
+    table.fr-table thead { display: none; }
+    table.fr-table, table.fr-table tbody, table.fr-table tr, table.fr-table td { display: block; width: 100%; }
+    table.fr-table tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    table.fr-table td { border: none; padding: 4px 0; }
+    .fr-actions { margin-top: 8px; }
+  }
+
+  @media print {
+    .fr-header-actions, .fr-controls, .fr-actions, th:last-child, td:last-child { display: none !important; }
+    body { background: #fff; padding: 0; }
+    .fr-table-wrap { border: none; }
+  }
+</style>
+</head>
+<body>
+<div id="frota-app"></div>
+
+<script>
+(function () {
+  const root = document.getElementById('frota-app');
+  const CFG_KEY = 'frota-supabase-config';
+  const THEME_KEY = 'frota-theme';
+
+  const ICONS = {
+    logo: `<svg width="30" height="30" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="var(--graphite)"/><path d="M20 62 L27 42 Q30 36 38 36 L62 36 Q70 36 73 42 L80 62 L80 72 Q80 76 76 76 L70 76 Q66 76 66 72 L66 68 L34 68 L34 72 Q34 76 30 76 L24 76 Q20 76 20 72 Z" fill="var(--amber)"/><circle cx="32" cy="68" r="6" fill="var(--graphite)"/><circle cx="68" cy="68" r="6" fill="var(--graphite)"/></svg>`,
+    car: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 1 0 4 0M15 17a2 2 0 1 0 4 0M3 11l1.5-5A2 2 0 0 1 6.4 5h11.2a2 2 0 0 1 1.9 1.4L21 11v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>`,
+    alert: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>`,
+    clock: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
+    check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+    sun: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
+    moon: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>`,
+  };
+
+  // ---------- tema (claro/escuro) ----------
+  function loadTheme() {
+    try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+  }
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+    render();
+  }
+
+  let state = {
+    loading: true,
+    booting: true,
+    config: null,
+    client: null,
+    user: null,
+    role: null,
+    vehicles: [],
+    search: '',
+    filter: 'todos',
+    filterContrato: 'todos',
+    filterCoordenador: 'todos',
+    modal: null,
+    detail: null,
+    error: null,
+    authError: null,
+    confirmDelete: null,
+    history: null,
+    historyLoading: false,
+  };
+
+  // ---------- utilidades de data / status ----------
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(dateStr + 'T00:00:00');
+    return Math.round((d - today) / 86400000);
+  }
+
+  // vencido: já passou | critico: 0-15 dias | atencao: 16-30 dias | ok: mais de 30 | sem: sem data
+  function statusOf(dateStr) {
+    if (!dateStr) return 'sem';
+    const days = daysUntil(dateStr);
+    if (days < 0) return 'vencido';
+    if (days <= 15) return 'critico';
+    if (days <= 30) return 'atencao';
+    return 'ok';
+  }
+
+  function statusLabel(dateStr) {
+    const s = statusOf(dateStr);
+    const days = daysUntil(dateStr);
+    if (s === 'sem') return 'Sem data';
+    if (s === 'vencido') return `Vencido há ${Math.abs(days)}d`;
+    if (s === 'critico') return days === 0 ? 'Vence hoje' : `Vence em ${days}d`;
+    if (s === 'atencao') return `Vence em ${days}d`;
+    return 'Em dia';
+  }
+
+  function fmtDate(dateStr) {
+    if (!dateStr) return '—';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function worstStatus(v) {
+    const order = { vencido: 4, critico: 3, atencao: 2, ok: 1, sem: 0 };
+    const a = statusOf(v.crlv_vencimento), b = statusOf(v.ipva_vencimento);
+    return order[a] >= order[b] ? a : b;
+  }
+
+  function tipoLabel(t) {
+    return { carro: 'Carro', moto: 'Moto', carrocinha: 'Carrocinha', outro: 'Outro' }[t] || '—';
+  }
+
+  // ---------- configuração do Supabase ----------
+  function loadConfig() {
+    try {
+      const raw = localStorage.getItem(CFG_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function saveConfig(cfg) {
+    localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  }
+
+  function initClient() {
+    if (!state.config) return;
+    state.client = supabase.createClient(state.config.url, state.config.anonKey);
+  }
+
+  // ---------- login / permissões ----------
+  async function bootSession() {
+    const { data } = await state.client.auth.getSession();
+    if (data && data.session) {
+      await onLoggedIn(data.session.user);
+    } else {
+      state.loading = false;
+      render();
+    }
+  }
+
+  async function onLoggedIn(user) {
+    state.user = user;
+    const { data: profile, error } = await state.client
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    state.role = (!error && profile) ? profile.role : 'usuario';
+    await loadData();
+  }
+
+  async function login(email, password) {
+    state.authError = null;
+    const { data, error } = await state.client.auth.signInWithPassword({ email, password });
+    if (error) {
+      state.authError = 'Não foi possível entrar: ' + error.message;
+      render();
+      return;
+    }
+    state.loading = true; render();
+    await onLoggedIn(data.user);
+  }
+
+  async function logout() {
+    await state.client.auth.signOut();
+    state.user = null;
+    state.role = null;
+    state.vehicles = [];
+    render();
+  }
+
+  function isAdmin() { return state.role === 'admin'; }
+
+  // ---------- dados ----------
+  async function loadData() {
+    if (!state.client) return;
+    state.loading = true; state.error = null; render();
+    const { data, error } = await state.client
+      .from('veiculos')
+      .select('*')
+      .order('criado_em', { ascending: true });
+    if (error) {
+      state.error = 'Não foi possível carregar os dados: ' + error.message;
+      state.vehicles = [];
+    } else {
+      state.vehicles = data || [];
+    }
+    state.loading = false;
+    render();
+  }
+
+  function placaValida(placa) {
+    const p = placa.trim().toUpperCase().replace(/[\s-]/g, '');
+    const antiga = /^[A-Z]{3}[0-9]{4}$/;      // ex: ABC1234
+    const mercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/; // ex: ABC1D23
+    return antiga.test(p) || mercosul.test(p);
+  }
+
+  async function saveModal() {
+    const m = state.modal;
+    if (!m.placa || !m.placa.trim()) { alert('Informe a placa do veículo.'); return; }
+    if (!placaValida(m.placa)) {
+      if (!confirm('Essa placa não parece seguir o formato padrão (antigo ABC1234 ou Mercosul ABC1D23). Salvar assim mesmo?')) return;
+    }
+
+    const payload = {
+      placa: m.placa.trim().toUpperCase(),
+      modelo: m.modelo || null,
+      tipo: m.tipo || null,
+      coordenador: m.coordenador || null,
+      contrato: m.contrato || null,
+      crlv_vencimento: m.crlv_vencimento || null,
+      ipva_vencimento: m.ipva_vencimento || null,
+      renavam: m.renavam || null,
+      chassi: m.chassi || null,
+      data_aquisicao: m.data_aquisicao || null,
+      tipo_detran: m.tipo_detran || null,
+      procedencia: m.procedencia || null,
+      categoria: m.categoria || null,
+      especie: m.especie || null,
+      ano_modelo: m.ano_modelo || null,
+      ano_fabricacao: m.ano_fabricacao || null,
+      cor: m.cor || null,
+      combustivel: m.combustivel || null,
+      crlv_arquivo_path: m.crlv_arquivo_path || null,
+    };
+
+    let error;
+    if (m.id) {
+      ({ error } = await state.client.from('veiculos').update(payload).eq('id', m.id));
+    } else {
+      ({ error } = await state.client.from('veiculos').insert([payload]));
+    }
+
+    if (error) {
+      alert('Erro ao salvar: ' + error.message);
+      return;
+    }
+    state.modal = null;
+    await loadData();
+  }
+
+  function openConfirmDelete(vehicle) { state.confirmDelete = { vehicle, typed: '' }; render(); }
+  function closeConfirmDelete() { state.confirmDelete = null; render(); }
+
+  async function confirmDeleteNow() {
+    const { vehicle } = state.confirmDelete;
+    const { error } = await state.client.from('veiculos').delete().eq('id', vehicle.id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    state.confirmDelete = null;
+    await loadData();
+  }
+
+  // ---------- histórico de alterações ----------
+  async function openHistory(vehicle) {
+    state.history = { vehicle, entries: [] };
+    state.historyLoading = true;
+    render();
+    const { data, error } = await state.client
+      .from('veiculos_historico')
+      .select('*')
+      .eq('veiculo_id', vehicle.id)
+      .order('alterado_em', { ascending: false });
+    state.historyLoading = false;
+    if (!error) state.history.entries = data || [];
+    render();
+  }
+  function closeHistory() { state.history = null; render(); }
+
+  const CAMPO_LABEL = {
+    placa: 'Placa', modelo: 'Modelo', tipo: 'Tipo', coordenador: 'Coordenador', contrato: 'Contrato',
+    crlv_vencimento: 'Vencimento CRLV', ipva_vencimento: 'Vencimento IPVA', renavam: 'RENAVAM', chassi: 'Chassi',
+    cor: 'Cor', combustivel: 'Combustível', categoria: 'Categoria', especie: 'Espécie',
+  };
+
+  function diffEntry(entry) {
+    const before = entry.dados_antigos || {};
+    const after = entry.dados_novos || {};
+    const keys = Object.keys(CAMPO_LABEL).filter(k => (before[k] || '') !== (after[k] || ''));
+    return keys.map(k => ({ campo: CAMPO_LABEL[k], de: before[k] || '—', para: after[k] || '—' }));
+  }
+
+  function openModal(vehicle) {
+    state.modal = vehicle
+      ? { ...vehicle }
+      : { id: null, placa: '', modelo: '', tipo: 'carro', coordenador: '', contrato: '', crlv_vencimento: '', ipva_vencimento: '',
+          renavam: '', chassi: '', data_aquisicao: '', tipo_detran: '', procedencia: '', categoria: '', especie: '',
+          ano_modelo: '', ano_fabricacao: '', cor: '', combustivel: '' };
+    state.detail = null;
+    render();
+  }
+  function closeModal() { state.modal = null; render(); }
+  function updateModalField(field, value) { state.modal[field] = value; }
+
+  function openDetail(vehicle) { state.detail = vehicle; render(); }
+  function closeDetail() { state.detail = null; render(); }
+
+  // ---------- CRLV: upload (admin) e download (qualquer logado) ----------
+  async function uploadCrlv(file) {
+    if (!state.modal || !state.modal.id) return;
+    const path = `${state.modal.id}/${Date.now()}_${file.name}`;
+    const { error: upErr } = await state.client.storage.from('crlvs').upload(path, file, { upsert: true });
+    if (upErr) { alert('Erro ao enviar o arquivo: ' + upErr.message); return; }
+    const { error: dbErr } = await state.client.from('veiculos').update({ crlv_arquivo_path: path }).eq('id', state.modal.id);
+    if (dbErr) { alert('Arquivo enviado, mas não foi possível vincular ao veículo: ' + dbErr.message); return; }
+    state.modal.crlv_arquivo_path = path;
+    render();
+    loadData();
+  }
+
+  async function downloadCrlv(path) {
+    const { data, error } = await state.client.storage.from('crlvs').createSignedUrl(path, 60);
+    if (error) { alert('Não foi possível gerar o link do arquivo: ' + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+
+  // ---------- exportar / importar CSV ----------
+  function csvEscape(v) {
+    const s = (v ?? '').toString();
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function exportCsv() {
+    const headers = ['placa', 'modelo', 'tipo', 'coordenador', 'contrato', 'crlv_vencimento', 'ipva_vencimento'];
+    const lines = [headers.join(',')];
+    state.vehicles.forEach(v => {
+      lines.push(headers.map(h => csvEscape(v[h])).join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `frota-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCsv(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+    if (!lines.length) return [];
+    const headers = lines[0].split(',').map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const cells = [];
+      let cur = '', inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (inQuotes) {
+          if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+          else if (c === '"') { inQuotes = false; }
+          else cur += c;
+        } else {
+          if (c === '"') inQuotes = true;
+          else if (c === ',') { cells.push(cur); cur = ''; }
+          else cur += c;
+        }
+      }
+      cells.push(cur);
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (cells[i] || '').trim());
+      return obj;
+    });
+  }
+
+  async function importCsv(file) {
+    const text = await file.text();
+    const rows = parseCsv(text);
+    if (!rows.length) { alert('Nenhuma linha encontrada no arquivo.'); return; }
+    const payload = rows
+      .filter(r => r.placa)
+      .map(r => ({
+        placa: r.placa.toUpperCase(),
+        modelo: r.modelo || null,
+        tipo: r.tipo || null,
+        coordenador: r.coordenador || null,
+        contrato: r.contrato || null,
+        crlv_vencimento: r.crlv_vencimento || null,
+        ipva_vencimento: r.ipva_vencimento || null,
+      }));
+    if (!confirm(`Importar ${payload.length} veículo(s) para o banco de dados?`)) return;
+    const { error } = await state.client.from('veiculos').insert(payload);
+    if (error) { alert('Erro ao importar: ' + error.message); return; }
+    await loadData();
+  }
+
+  // ---------- filtro / busca ----------
+  function filteredSorted() {
+    const q = state.search.toLowerCase();
+    let list = state.vehicles.filter(v => {
+      const matchesSearch = !q
+        || (v.placa || '').toLowerCase().includes(q)
+        || (v.modelo || '').toLowerCase().includes(q)
+        || (v.coordenador || '').toLowerCase().includes(q)
+        || (v.contrato || '').toLowerCase().includes(q);
+      const st = worstStatus(v);
+      const matchesFilter = state.filter === 'todos' || st === state.filter;
+      const matchesContrato = state.filterContrato === 'todos' || (v.contrato || 'Sem contrato') === state.filterContrato;
+      const matchesCoordenador = state.filterCoordenador === 'todos' || (v.coordenador || 'Sem coordenador') === state.filterCoordenador;
+      return matchesSearch && matchesFilter && matchesContrato && matchesCoordenador;
+    });
+    list.sort((a, b) => {
+      const da = Math.min(daysUntil(a.crlv_vencimento) ?? 9999, daysUntil(a.ipva_vencimento) ?? 9999);
+      const db = Math.min(daysUntil(b.crlv_vencimento) ?? 9999, daysUntil(b.ipva_vencimento) ?? 9999);
+      return da - db;
+    });
+    return list;
+  }
+
+  function uniqueValues(field, fallback) {
+    const set = new Set(state.vehicles.map(v => v[field] || fallback));
+    return Array.from(set).sort();
+  }
+
+  // ---------- exportar PDF (via impressão do navegador) ----------
+  function exportPdf() {
+    window.print();
+  }
+
+  // ---------- render ----------
+  function renderConfigScreen() {
+    const cfg = state.config || { url: '', anonKey: '' };
+    root.innerHTML = `
+      <div class="fr-wrap" style="max-width:480px;">
+        <div class="fr-header"><div>
+          <h1 class="fr-title">Controle de Frota</h1>
+          <p class="fr-sub">Conecte ao seu banco de dados Supabase para começar</p>
+        </div></div>
+        <div class="fr-table-wrap" style="padding:22px;">
+          <div class="fr-field">
+            <label>URL do projeto Supabase</label>
+            <input id="cfg-url" type="text" placeholder="https://xxxxx.supabase.co" value="${cfg.url}" />
+          </div>
+          <div class="fr-field">
+            <label>Chave anon (public)</label>
+            <input id="cfg-key" type="text" placeholder="eyJhbGciOi..." value="${cfg.anonKey}" />
+          </div>
+          <p class="fr-modal-note">Essas informações ficam salvas só neste navegador (localStorage), nunca no código do projeto. Veja o README para saber onde encontrá-las no painel do Supabase.</p>
+          <button class="fr-add-btn" id="cfg-save" style="width:100%;">Salvar e conectar</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('cfg-save').addEventListener('click', () => {
+      const url = document.getElementById('cfg-url').value.trim();
+      const anonKey = document.getElementById('cfg-key').value.trim();
+      if (!url || !anonKey) { alert('Preencha os dois campos.'); return; }
+      state.config = { url, anonKey };
+      saveConfig(state.config);
+      state.booting = false;
+      initClient();
+      bootSession();
+    });
+  }
+
+  function renderLoginScreen() {
+    root.innerHTML = `
+      <div class="fr-wrap" style="max-width:400px;">
+        <div class="fr-header"><div>
+          <h1 class="fr-title">Controle de Frota</h1>
+          <p class="fr-sub">Entre com sua conta para acessar</p>
+        </div></div>
+        <div class="fr-table-wrap" style="padding:22px;">
+          ${state.authError ? `<div class="fr-error">${state.authError}</div>` : ''}
+          <div class="fr-field">
+            <label>E-mail</label>
+            <input id="login-email" type="email" placeholder="voce@empresa.com" />
+          </div>
+          <div class="fr-field">
+            <label>Senha</label>
+            <input id="login-senha" type="password" placeholder="••••••••" />
+          </div>
+          <button class="fr-add-btn" id="login-btn" style="width:100%;">Entrar</button>
+          <p class="fr-modal-note" style="margin-top:14px;">Não tem uma conta? Peça ao administrador para criar uma para você no painel do Supabase (Authentication → Users).</p>
+          <button class="fr-link-btn" id="login-reconfig" style="margin-top:6px;">Trocar banco de dados</button>
+        </div>
+      </div>
+    `;
+    const doLogin = () => {
+      const email = document.getElementById('login-email').value.trim();
+      const senha = document.getElementById('login-senha').value;
+      if (!email || !senha) { state.authError = 'Preencha e-mail e senha.'; render(); return; }
+      login(email, senha);
+    };
+    document.getElementById('login-btn').addEventListener('click', doLogin);
+    document.getElementById('login-senha').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    document.getElementById('login-reconfig').addEventListener('click', () => {
+      state.booting = true; state.authError = null; render();
+    });
+  }
+
+  function renderList() {
+    const container = document.getElementById('fr-list-container');
+    if (!container) return;
+    const list = filteredSorted();
+    const total = state.vehicles.length;
+
+    container.innerHTML = list.length === 0 ? `
+      <div class="fr-empty">
+        ${total === 0 ? 'Nenhum veículo cadastrado ainda. Clique em "Adicionar veículo" para começar.' : 'Nenhum veículo encontrado com esse filtro.'}
+      </div>
+    ` : `
+      <table class="fr-table">
+        <thead><tr>
+          <th>Veículo</th><th>Coordenador / contrato</th><th>CRLV</th><th>IPVA</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${list.map(v => `
+            <tr class="status-${worstStatus(v)}">
+              <td><div class="fr-placa fr-placa-link" data-detail-id="${v.id}">${v.placa || '—'}</div><div class="fr-modelo">${tipoLabel(v.tipo)}${v.modelo ? ' · ' + v.modelo : ''}</div></td>
+              <td>${v.coordenador || '—'}<div class="fr-contrato">${v.contrato || ''}</div></td>
+              <td><span class="fr-badge ${statusOf(v.crlv_vencimento)}">${statusLabel(v.crlv_vencimento)}</span><div class="fr-date">${fmtDate(v.crlv_vencimento)}</div></td>
+              <td><span class="fr-badge ${statusOf(v.ipva_vencimento)}">${statusLabel(v.ipva_vencimento)}</span><div class="fr-date">${fmtDate(v.ipva_vencimento)}</div></td>
+              <td><div class="fr-actions">
+                ${isAdmin() ? `<button class="fr-icon-btn hist" data-id="${v.id}">Histórico</button>` : ''}
+                ${isAdmin() ? `<button class="fr-icon-btn edit" data-id="${v.id}">Editar</button>` : ''}
+                ${isAdmin() ? `<button class="fr-icon-btn del" data-id="${v.id}">Excluir</button>` : ''}
+              </div></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    container.querySelectorAll('.fr-icon-btn.edit').forEach(btn => {
+      btn.addEventListener('click', () => openModal(state.vehicles.find(x => x.id === btn.dataset.id)));
+    });
+    container.querySelectorAll('.fr-placa-link').forEach(el => {
+      el.addEventListener('click', () => openDetail(state.vehicles.find(x => x.id === el.dataset.detailId)));
+    });
+    container.querySelectorAll('.fr-icon-btn.del').forEach(btn => {
+      btn.addEventListener('click', () => openConfirmDelete(state.vehicles.find(x => x.id === btn.dataset.id)));
+    });
+    container.querySelectorAll('.fr-icon-btn.hist').forEach(btn => {
+      btn.addEventListener('click', () => openHistory(state.vehicles.find(x => x.id === btn.dataset.id)));
+    });
+  }
+
+  function render() {
+    if (state.booting) { renderConfigScreen(); return; }
+    if (!state.user && !state.loading) { renderLoginScreen(); return; }
+    if (state.loading) { root.innerHTML = '<div class="fr-loading">Carregando controle de frota…</div>'; return; }
+
+    const total = state.vehicles.length;
+    const vencidos = state.vehicles.filter(v => worstStatus(v) === 'vencido').length;
+    const criticos = state.vehicles.filter(v => worstStatus(v) === 'critico').length;
+    const atencao = state.vehicles.filter(v => worstStatus(v) === 'atencao').length;
+    const emDia = state.vehicles.filter(v => worstStatus(v) === 'ok').length;
+
+    root.innerHTML = `
+      <div class="fr-wrap">
+        <div class="fr-header">
+          <div class="fr-logo">
+            ${ICONS.logo}
+            <div>
+              <h1 class="fr-title">Controle de Frota</h1>
+              <p class="fr-sub">Vencimentos de CRLV e IPVA por veículo</p>
+            </div>
+          </div>
+          <div class="fr-header-actions">
+            <div class="fr-user-bar">
+              <span class="fr-role-badge ${isAdmin() ? 'admin' : ''}">${isAdmin() ? 'Administrador' : 'Usuário'}</span>
+              <span>${state.user ? state.user.email : ''}</span>
+              <button class="fr-link-btn" id="fr-logout">Sair</button>
+              <button class="fr-link-btn" id="fr-reconfig">Trocar banco de dados</button>
+            </div>
+            <button class="fr-theme-btn" id="fr-theme-toggle" title="Alternar tema">${(document.documentElement.getAttribute('data-theme') === 'dark') ? ICONS.sun : ICONS.moon}</button>
+            <button class="fr-ghost-btn" id="fr-export">Exportar CSV</button>
+            <button class="fr-ghost-btn" id="fr-export-pdf">Exportar PDF</button>
+            ${isAdmin() ? `
+              <button class="fr-ghost-btn" id="fr-import-btn">Importar planilha (CSV)</button>
+              <input type="file" id="fr-import-file" accept=".csv" style="display:none" />
+              <button class="fr-add-btn" id="fr-add">+ Adicionar veículo</button>
+            ` : ''}
+          </div>
+        </div>
+
+        ${state.error ? `<div class="fr-error">${state.error}</div>` : ''}
+
+        <div class="fr-stats">
+          <div class="fr-stat"><div class="icon">${ICONS.car}</div><div><div class="num">${total}</div><div class="lbl">Veículos cadastrados</div></div></div>
+          <div class="fr-stat vencido"><div class="icon">${ICONS.alert}</div><div><div class="num">${vencidos}</div><div class="lbl">Vencidos</div></div></div>
+          <div class="fr-stat critico"><div class="icon">${ICONS.alert}</div><div><div class="num">${criticos}</div><div class="lbl">Críticos (0-15 dias)</div></div></div>
+          <div class="fr-stat atencao"><div class="icon">${ICONS.clock}</div><div><div class="num">${atencao}</div><div class="lbl">Atenção (16-30 dias)</div></div></div>
+          <div class="fr-stat ok"><div class="icon">${ICONS.check}</div><div><div class="num">${emDia}</div><div class="lbl">Em dia</div></div></div>
+        </div>
+
+        <div class="fr-controls">
+          <input class="fr-search" id="fr-search" type="text" placeholder="Buscar por placa, modelo, coordenador ou contrato…" value="${state.search}" />
+          <div class="fr-filters-row">
+            <select class="fr-filter" id="fr-filter">
+              <option value="todos" ${state.filter === 'todos' ? 'selected' : ''}>Todos os status</option>
+              <option value="vencido" ${state.filter === 'vencido' ? 'selected' : ''}>Vencidos</option>
+              <option value="critico" ${state.filter === 'critico' ? 'selected' : ''}>Críticos (0-15 dias)</option>
+              <option value="atencao" ${state.filter === 'atencao' ? 'selected' : ''}>Atenção (16-30 dias)</option>
+              <option value="ok" ${state.filter === 'ok' ? 'selected' : ''}>Em dia</option>
+              <option value="sem" ${state.filter === 'sem' ? 'selected' : ''}>Sem data</option>
+            </select>
+            <select class="fr-filter" id="fr-filter-contrato">
+              <option value="todos">Todos os contratos</option>
+              ${uniqueValues('contrato', 'Sem contrato').map(c => `<option value="${c}" ${state.filterContrato === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+            <select class="fr-filter" id="fr-filter-coordenador">
+              <option value="todos">Todos os coordenadores</option>
+              ${uniqueValues('coordenador', 'Sem coordenador').map(c => `<option value="${c}" ${state.filterCoordenador === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="fr-table-wrap" id="fr-list-container"></div>
+      </div>
+
+      ${state.modal ? `
+        <div class="fr-overlay" id="fr-overlay">
+          <div class="fr-modal">
+            <h3>${state.modal.id ? 'Editar veículo' : 'Adicionar veículo'}</h3>
+            <p class="fr-modal-note">Prazo de aviso crítico: 0 a 15 dias antes do vencimento.</p>
+            <div class="fr-field"><label>Placa</label><input id="m-placa" type="text" value="${state.modal.placa || ''}" placeholder="ABC-1234" /></div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Tipo</label>
+                <select id="m-tipo">
+                  <option value="carro" ${state.modal.tipo === 'carro' ? 'selected' : ''}>Carro</option>
+                  <option value="moto" ${state.modal.tipo === 'moto' ? 'selected' : ''}>Moto</option>
+                  <option value="carrocinha" ${state.modal.tipo === 'carrocinha' ? 'selected' : ''}>Carrocinha</option>
+                  <option value="outro" ${state.modal.tipo === 'outro' ? 'selected' : ''}>Outro</option>
+                </select>
+              </div>
+              <div class="fr-field"><label>Modelo / ano</label><input id="m-modelo" type="text" value="${state.modal.modelo || ''}" placeholder="Ex: Onix 2022" /></div>
+            </div>
+            <div class="fr-field"><label>Coordenador responsável</label><input id="m-coordenador" type="text" value="${state.modal.coordenador || ''}" placeholder="Nome do coordenador" /></div>
+            <div class="fr-field"><label>Contrato vinculado</label><input id="m-contrato" type="text" value="${state.modal.contrato || ''}" placeholder="Ex: 33195 - Shopping da Bahia" /></div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Vencimento do CRLV</label><input id="m-crlv" type="date" value="${state.modal.crlv_vencimento || ''}" /></div>
+              <div class="fr-field"><label>Vencimento do IPVA</label><input id="m-ipva" type="date" value="${state.modal.ipva_vencimento || ''}" /></div>
+            </div>
+
+            <div class="fr-field">
+              <label>Arquivo do CRLV</label>
+              ${state.modal.id ? `
+                <div class="fr-crlv-box">
+                  ${state.modal.crlv_arquivo_path ? 'Já existe um arquivo anexado a este veículo.' : 'Nenhum arquivo anexado ainda.'}
+                  <br />
+                  <input type="file" id="m-crlv-file" accept=".pdf,.jpg,.jpeg,.png" />
+                </div>
+              ` : `
+                <div class="fr-crlv-box">Salve o veículo primeiro; depois volte em "Editar" para anexar o arquivo do CRLV.</div>
+              `}
+            </div>
+
+            <div class="fr-fieldset-title">Dados do DETRAN (opcional)</div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>RENAVAM</label><input id="m-renavam" type="text" value="${state.modal.renavam || ''}" /></div>
+              <div class="fr-field"><label>Chassi</label><input id="m-chassi" type="text" value="${state.modal.chassi || ''}" /></div>
+            </div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Data de aquisição</label><input id="m-data_aquisicao" type="date" value="${state.modal.data_aquisicao || ''}" /></div>
+              <div class="fr-field"><label>Tipo (DETRAN)</label><input id="m-tipo_detran" type="text" value="${state.modal.tipo_detran || ''}" placeholder="Ex: Reboque, Passeio" /></div>
+            </div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Procedência</label><input id="m-procedencia" type="text" value="${state.modal.procedencia || ''}" placeholder="Ex: Nacional" /></div>
+              <div class="fr-field"><label>Categoria</label><input id="m-categoria" type="text" value="${state.modal.categoria || ''}" placeholder="Ex: Particular" /></div>
+            </div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Espécie</label><input id="m-especie" type="text" value="${state.modal.especie || ''}" placeholder="Ex: Carga" /></div>
+              <div class="fr-field"><label>Cor</label><input id="m-cor" type="text" value="${state.modal.cor || ''}" /></div>
+            </div>
+            <div class="fr-row2">
+              <div class="fr-field"><label>Ano modelo</label><input id="m-ano_modelo" type="text" value="${state.modal.ano_modelo || ''}" /></div>
+              <div class="fr-field"><label>Ano fabricação</label><input id="m-ano_fabricacao" type="text" value="${state.modal.ano_fabricacao || ''}" /></div>
+            </div>
+            <div class="fr-field"><label>Combustível</label><input id="m-combustivel" type="text" value="${state.modal.combustivel || ''}" /></div>
+
+            <div class="fr-modal-actions">
+              <button class="fr-btn-secondary" id="fr-cancel">Cancelar</button>
+              <button class="fr-btn-primary" id="fr-save">Salvar</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.detail ? `
+        <div class="fr-overlay" id="fr-detail-overlay">
+          <div class="fr-modal">
+            <h3>${state.detail.placa || 'Veículo'}</h3>
+            <p class="fr-modal-note">${tipoLabel(state.detail.tipo)}${state.detail.modelo ? ' · ' + state.detail.modelo : ''}</p>
+            <div class="fr-detail-grid">
+              ${[
+                ['RENAVAM', state.detail.renavam],
+                ['Chassi', state.detail.chassi],
+                ['Data de aquisição', fmtDate(state.detail.data_aquisicao)],
+                ['Tipo (DETRAN)', state.detail.tipo_detran],
+                ['Procedência', state.detail.procedencia],
+                ['Categoria', state.detail.categoria],
+                ['Espécie', state.detail.especie],
+                ['Ano modelo', state.detail.ano_modelo],
+                ['Ano fabricação', state.detail.ano_fabricacao],
+                ['Cor', state.detail.cor],
+                ['Combustível', state.detail.combustivel],
+                ['Coordenador', state.detail.coordenador],
+                ['Contrato', state.detail.contrato],
+              ].map(([lbl, val]) => `
+                <div class="fr-detail-item">
+                  <div class="lbl">${lbl}</div>
+                  <div class="val ${val ? '' : 'empty'}">${val || 'Não informado'}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="fr-field" style="margin-top:16px;">
+              <label>CRLV</label>
+              <div class="fr-crlv-box">
+                ${state.detail.crlv_arquivo_path
+                  ? `<button class="fr-btn-secondary" id="fr-detail-download">Baixar CRLV</button>`
+                  : 'Nenhum arquivo de CRLV anexado a este veículo ainda.'}
+              </div>
+            </div>
+            <div class="fr-modal-actions">
+              <button class="fr-btn-secondary" id="fr-detail-close">Fechar</button>
+              ${isAdmin() ? `<button class="fr-btn-primary" id="fr-detail-edit">Editar veículo</button>` : ''}
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.confirmDelete ? `
+        <div class="fr-overlay" id="fr-confirm-overlay">
+          <div class="fr-modal" style="max-width:380px;">
+            <h3>Excluir veículo</h3>
+            <p class="fr-confirm-text">Isso remove <b>${state.confirmDelete.vehicle.placa}</b> permanentemente do controle. Pra confirmar, digite a placa abaixo:</p>
+            <div class="fr-field"><input id="confirm-placa-input" type="text" placeholder="${state.confirmDelete.vehicle.placa}" /></div>
+            <div class="fr-modal-actions">
+              <button class="fr-btn-secondary" id="fr-confirm-cancel">Cancelar</button>
+              <button class="fr-btn-primary" id="fr-confirm-ok" style="background:var(--red);" disabled>Excluir</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.history ? `
+        <div class="fr-overlay" id="fr-history-overlay">
+          <div class="fr-modal" style="max-width:480px;">
+            <h3>Histórico — ${state.history.vehicle.placa}</h3>
+            <p class="fr-modal-note">Alterações feitas neste veículo, mais recentes primeiro.</p>
+            <div class="fr-history-list">
+              ${state.historyLoading ? '<div class="fr-history-empty">Carregando…</div>' : (
+                state.history.entries.length === 0 ? '<div class="fr-history-empty">Nenhuma alteração registrada ainda.</div>' :
+                state.history.entries.map(entry => {
+                  const changes = entry.operacao === 'DELETE' ? [] : diffEntry(entry);
+                  const quando = new Date(entry.alterado_em).toLocaleString('pt-BR');
+                  return `
+                    <div class="fr-history-item">
+                      <div class="meta">${entry.operacao === 'DELETE' ? 'Excluído' : (entry.operacao === 'INSERT' ? 'Criado' : 'Editado')} em ${quando} por ${entry.alterado_por_email || 'desconhecido'}</div>
+                      ${changes.length ? changes.map(c => `<div class="change"><b>${c.campo}:</b> ${c.de} → ${c.para}</div>`).join('') : (entry.operacao === 'INSERT' ? '<div class="change">Cadastro inicial</div>' : '')}
+                    </div>
+                  `;
+                }).join('')
+              )}
+            </div>
+            <div class="fr-modal-actions">
+              <button class="fr-btn-secondary" id="fr-history-close">Fechar</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    document.getElementById('fr-add')?.addEventListener('click', () => openModal(null));
+    document.getElementById('fr-search')?.addEventListener('input', (e) => { state.search = e.target.value; renderList(); });
+    document.getElementById('fr-filter')?.addEventListener('change', (e) => { state.filter = e.target.value; renderList(); });
+    document.getElementById('fr-filter-contrato')?.addEventListener('change', (e) => { state.filterContrato = e.target.value; renderList(); });
+    document.getElementById('fr-filter-coordenador')?.addEventListener('change', (e) => { state.filterCoordenador = e.target.value; renderList(); });
+    document.getElementById('fr-theme-toggle')?.addEventListener('click', toggleTheme);
+    document.getElementById('fr-export')?.addEventListener('click', exportCsv);
+    document.getElementById('fr-export-pdf')?.addEventListener('click', exportPdf);
+    document.getElementById('fr-import-btn')?.addEventListener('click', () => document.getElementById('fr-import-file').click());
+    document.getElementById('fr-import-file')?.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) importCsv(e.target.files[0]);
+      e.target.value = '';
+    });
+    document.getElementById('fr-reconfig')?.addEventListener('click', () => {
+      if (!confirm('Isso vai pedir novamente a URL e a chave do Supabase neste navegador. Continuar?')) return;
+      state.booting = true;
+      render();
+    });
+    document.getElementById('fr-logout')?.addEventListener('click', logout);
+
+    renderList();
+
+    if (state.modal) {
+      document.getElementById('fr-cancel').addEventListener('click', closeModal);
+      document.getElementById('fr-save').addEventListener('click', saveModal);
+      [
+        'placa', 'modelo', 'tipo', 'coordenador', 'contrato', 'crlv_vencimento', 'ipva_vencimento',
+        'renavam', 'chassi', 'data_aquisicao', 'tipo_detran', 'procedencia', 'categoria',
+        'especie', 'ano_modelo', 'ano_fabricacao', 'cor', 'combustivel',
+      ].forEach(f => {
+        const idMap = { crlv_vencimento: 'm-crlv', ipva_vencimento: 'm-ipva' };
+        const el = document.getElementById(idMap[f] || 'm-' + f);
+        if (el) el.addEventListener('input', (e) => updateModalField(f, e.target.value));
+      });
+      document.getElementById('fr-overlay').addEventListener('click', (e) => { if (e.target.id === 'fr-overlay') closeModal(); });
+      document.getElementById('m-crlv-file')?.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) uploadCrlv(e.target.files[0]);
+      });
+    }
+
+    if (state.detail) {
+      document.getElementById('fr-detail-close').addEventListener('click', closeDetail);
+      document.getElementById('fr-detail-edit')?.addEventListener('click', () => {
+        const v = state.detail;
+        state.detail = null;
+        openModal(v);
+      });
+      document.getElementById('fr-detail-download')?.addEventListener('click', () => downloadCrlv(state.detail.crlv_arquivo_path));
+      document.getElementById('fr-detail-overlay').addEventListener('click', (e) => { if (e.target.id === 'fr-detail-overlay') closeDetail(); });
+    }
+
+    if (state.confirmDelete) {
+      const input = document.getElementById('confirm-placa-input');
+      const okBtn = document.getElementById('fr-confirm-ok');
+      input.addEventListener('input', (e) => {
+        okBtn.disabled = e.target.value.trim().toUpperCase() !== state.confirmDelete.vehicle.placa.toUpperCase();
+      });
+      document.getElementById('fr-confirm-cancel').addEventListener('click', closeConfirmDelete);
+      okBtn.addEventListener('click', confirmDeleteNow);
+      document.getElementById('fr-confirm-overlay').addEventListener('click', (e) => { if (e.target.id === 'fr-confirm-overlay') closeConfirmDelete(); });
+    }
+
+    if (state.history) {
+      document.getElementById('fr-history-close').addEventListener('click', closeHistory);
+      document.getElementById('fr-history-overlay').addEventListener('click', (e) => { if (e.target.id === 'fr-history-overlay') closeHistory(); });
+    }
+  }
+
+  // ---------- boot ----------
+  applyTheme(loadTheme());
+  state.config = loadConfig();
+  if (state.config) {
+    state.booting = false;
+    initClient();
+    render();
+    bootSession();
+  } else {
+    render();
+  }
+})();
+</script>
+</body>
+</html>
